@@ -1,0 +1,210 @@
+version: '3'
+
+services:
+
+  # TimescaleDB Database
+  cde-timescale-database:
+    image: timescale/timescaledb-postgis:latest-pg12
+    container_name: timescaledb
+    command: postgres -c 'max_connections=200'
+    environment:
+      - POSTGRES_MULTIPLE_DATABASES=cowdata,cowinfo
+      - POSTGRES_PASSWORD=password
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    volumes:
+      - cde-timescaledb-data:/var/lib/postgresql/data
+    networks:
+      - cde-compose-network
+
+  # PostgreSQL Database
+  cde-auth-database:
+    image: postgres:13
+    container_name: authdb
+    command: postgres -c 'max_connections=200'
+    environment:
+      - POSTGRES_PASSWORD=password
+    restart: unless-stopped
+    ports:
+      - "5433:5432"
+    volumes:
+      - cde-authdb-data:/var/lib/postgresql/data
+    networks:
+      - cde-compose-network
+
+  # Zookeeper for Apache Kafka
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    restart: unless-stopped
+    ports:
+      - 22181:2181
+    networks:
+      - cde-compose-network
+
+  # Kafka Single Node
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    depends_on:
+      - zookeeper
+    ports:
+      - 29092:29092
+    restart: unless-stopped
+    container_name: kafka
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://kafka:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    networks:
+      - cde-compose-network
+
+  # Automatically creates required kafka topics if they were not created.
+  kafka-topics-creator:
+    build:
+      context: kafka
+      dockerfile: Dockerfile
+    container_name: kafka-topics-creator
+    depends_on:
+      - zookeeper
+      - kafka
+    environment:
+      ZOOKEEPER_HOSTS: "zookeeper:2181"
+      KAFKA_TOPICS: "gps accelerometer gyroscope motion activity"
+    networks:
+      - cde-compose-network
+
+  # Gateway and Load Balancer
+  traefik:
+    image: "traefik:v2.4"
+    container_name: "traefik"
+    hostname: "traefik"
+    ports:
+      - "80:80"
+      - "8080:8080"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "./traefik/traefik.yml:/traefik.yml:ro"
+      - "./traefik/traefik-local.yml:/traefik-local.yml:ro"
+    networks:
+      - cde-compose-network
+
+  # Cow Data Authorization
+  cow-data-authorization:
+    image: cow-data-authorization:latest
+    container_name: cow-data-authorization
+    build:
+      context: ../../cde.cow-data-authorization/
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.authorization.entrypoints=web"
+      - "traefik.http.routers.authorization.rule=Host(`auth.$MY_DOMAIN`)"
+      - "traefik.http.services.authorization.loadbalancer.server.port=8094"
+    depends_on:
+      - cde-auth-database
+    environment:
+      SPRING_PROFILES_ACTIVE: "${ENVIRONMENT}"
+    networks:
+      - cde-compose-network
+
+  # Cow Data Publisher
+  cow-data-publisher:
+    image: cow-data-publisher:latest
+    container_name: cow-data-publisher
+    build:
+      context: ../../cde.cow-data-publisher/
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8090:8090"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.publisher.entrypoints=web"
+      - "traefik.http.routers.publisher.rule=Host(`publisher.$MY_DOMAIN`)"
+      - "traefik.http.services.publisher.loadbalancer.server.port=8090"
+    depends_on:
+      - zookeeper
+      - kafka
+      - cde-timescale-database
+    environment:
+      SPRING_PROFILES_ACTIVE: "${ENVIRONMENT}"
+    networks:
+      - cde-compose-network
+
+  # Cow Data Consumer
+  cow-data-consumer:
+    image: cow-data-consumer:latest
+    container_name: cow-data-consumer
+    build:
+      context: ../../cde.cow-data-consumer/
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - zookeeper
+      - kafka
+      - cde-timescale-database
+    environment:
+      SPRING_PROFILES_ACTIVE: "${ENVIRONMENT}"
+    networks:
+      - cde-compose-network
+
+  # Cow Data Processor
+  cow-data-processor:
+    image: cow-data-processor:latest
+    container_name: cow-data-processor
+    build:
+      context: ../../cde.cow-data-processor/
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - zookeeper
+      - kafka
+      - cde-timescale-database
+    environment:
+      SPRING_PROFILES_ACTIVE: "${ENVIRONMENT}"
+    networks:
+      - cde-compose-network
+
+  # Cow Data Visualization
+  cow-data-visualization:
+    image: cow-data-visualization:latest
+    container_name: cow-data-visualization
+    build:
+      context: ../../cde.cow-data-visualization/
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8093:8093"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.middlewares.visualization-auth.forwardAuth.address=http://auth.localhost/api/auth"
+      - "traefik.http.middlewares.visualization-auth.forwardauth.trustForwardHeader=true"
+      - "traefik.http.middlewares.visualization-auth.forwardauth.authResponseHeaders=x-user-id, x-user-roles"
+      - "traefik.http.routers.visualization.entrypoints=web"
+      - "traefik.http.routers.visualization.rule=Host(`visualization.$MY_DOMAIN`)"
+      - "traefik.http.routers.visualization.middlewares=visualization-auth"
+      - "traefik.http.services.visualization.loadbalancer.server.port=8093"
+    depends_on:
+      - zookeeper
+      - kafka
+      - cde-timescale-database
+    environment:
+      SPRING_PROFILES_ACTIVE: "${ENVIRONMENT}"
+    networks:
+      - cde-compose-network
+
+networks: 
+  cde-compose-network:
+    external: true
+
+volumes:
+  cde-timescaledb-data:
+  cde-authdb-data:

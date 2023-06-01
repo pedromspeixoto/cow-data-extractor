@@ -1,0 +1,28 @@
+kafka:
+  bootstrap:
+    address: kafka:29092
+  motion:
+    input-topic:
+      name: motion
+    output-topic:
+      name: activity
+
+dl4j:
+  snn-motion:
+    dataset:
+      location: /app/motion.txt
+    model:
+      location: /app/DL4JMotionModel.zip
+
+cde:
+  swagger:
+    enabled: true
+  ssl:
+    enabled: false
+  log:
+    requests: true
+
+logging:
+  level:
+    com.cde: INFO
+    org.springframework.web: INFO

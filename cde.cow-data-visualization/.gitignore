@@ -1,0 +1,8 @@
+### VS Code ###
+.vscode/
+
+### Java Binaries ###
+target/
+.settings/
+.project
+.classpath

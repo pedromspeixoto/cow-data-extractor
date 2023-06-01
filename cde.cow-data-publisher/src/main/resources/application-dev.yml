@@ -1,0 +1,28 @@
+kafka:
+  bootstrap:
+    address: kafka:29092
+  gps:
+    topic:
+      name: gps
+  accelerometer:
+    topic:
+      name: accelerometer
+  gyroscope:
+    topic:
+      name: gyroscope
+  motion:
+    topic:
+      name: motion
+
+cde:
+  swagger:
+    enabled: true
+  ssl:
+    enabled: false
+  log:
+    requests: true
+
+logging:
+  level:
+    com.cde: INFO
+    org.springframework.web: INFO

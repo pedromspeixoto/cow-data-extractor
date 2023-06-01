@@ -1,0 +1,52 @@
+spring:
+  datasource:
+    driver-class-name: org.postgresql.Driver
+    url: jdbc:postgresql://timescaledb:5432/cowdata
+    username: postgres
+    password: password
+    jpa:
+      hibernate:
+        ddl-auto: none
+      show-sql: true
+  flyway:
+    enabled: true
+    baseline-on-migrate: false
+    out-of-order: false
+
+kafka:
+  bootstrap:
+    address: localhost:29092
+  gps:
+    topic:
+      name: gps
+  accelerometer:
+    topic:
+      name: accelerometer
+  gyroscope:
+    topic:
+      name: gyroscope
+  activity:
+    topic:
+      name: activity
+
+grpc:
+  server:
+    port: 8080
+
+mongodb:
+  database:
+    name: cde-database
+    connection-string: mongodb://localhost:27017/cde-database
+
+cde:
+  swagger:
+    enabled: true
+  ssl:
+    enabled: false
+  log:
+    requests: true
+
+logging:
+  level:
+    com.cde: INFO
+    org.springframework.web: INFO

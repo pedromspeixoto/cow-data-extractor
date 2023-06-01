@@ -1,0 +1,34 @@
+spring:
+  datasource:
+    driver-class-name: org.postgresql.Driver
+    url: jdbc:postgresql://authdb:5432/auth
+    username: postgres
+    password: password
+    jpa:
+      hibernate:
+        ddl-auto: none
+      show-sql: true
+  flyway:
+    enabled: true
+    baseline-on-migrate: false
+    out-of-order: false
+
+cde:
+  app:
+    jwtSecret: cdeSecretKey
+    jwtExpirationMs: 86400000
+  auth:
+    enabled: true
+    audit: true
+  swagger:
+    enabled: true
+    url: "/, /csrf, /v2/api-docs, /swagger-resources/configuration/ui, /configuration/ui, /swagger-resources, /swagger-resources/configuration/security, /configuration/security, /swagger-ui.html, /swagger-ui.html/**, /webjars/**"
+  ssl:
+    enabled: false
+  log:
+    requests: true
+
+logging:
+  level:
+    com.cde: INFO
+    org.springframework.web: INFO
